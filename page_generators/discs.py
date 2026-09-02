@@ -262,13 +262,13 @@ def save_disk_skills():
         set_template_skill(t, disc.main_skill)
         set_section_content(parsed, "Melody Skill", str(t))
 
-        harmoney_skills = []
+        harmony_skills = []
         for secondary_skill in disc.secondary_skills:
             t = Template("{{DiscHarmonySkill\n}}")
             set_template_skill(t, secondary_skill)
-            harmoney_skills.append(str(t))
-        text = "This disc does not have any harmoney skills."
-        if len(harmoney_skills) > 0:
+            harmony_skills.append(str(t))
+        text = "This disc does not have any harmony skills."
+        if len(harmony_skills) > 0:
             text = "\n".join(harmoney_skills)
         set_section_content(parsed, "Harmony Skill", text)
 
