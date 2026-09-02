@@ -269,7 +269,7 @@ def save_disk_skills():
             harmony_skills.append(str(t))
         text = "This disc does not have any harmony skills."
         if len(harmony_skills) > 0:
-            text = "\n".join(harmoney_skills)
+            text = "\n".join(harmony_skills)
         set_section_content(parsed, "Harmony Skill", text)
 
         save_page(p, str(parsed), "update disk skills")
