@@ -1,0 +1,33 @@
+services:
+  stellasora:
+    build: .
+    image: stellasorabot:cuda12.8
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - STELLA_SORA_DIR=/home/bot/.wine-stella/drive_c/YostarGames/StellaSora_EN
+      - WINEPREFIX=/home/bot/.wine-stella
+      - DISPLAY=${DISPLAY:-:0}
+    volumes:
+      # game + wine prefix persist
+      - stella-wine:/home/bot/.wine-stella
+      # private unpacker — REQUIRED, not in public image (legal)
+      # - /path/to/private/fkStellaSora:/home/bot/StellaSoraBot/vendor/fkStellaSora:ro
+      # optional: persist vendor downloads, wiki creds
+      - ./user-passwords.py:/home/bot/StellaSoraBot/user-passwords.py:ro
+    stdin_open: true
+    tty: true
+    # interactive shell (as requested); override to run bot:
+    #   docker compose run stellasora uv run -m unpack.unpack_main
+    command: /bin/bash
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  stella-wine:
