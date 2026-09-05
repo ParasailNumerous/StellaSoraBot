@@ -3,12 +3,11 @@ FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # --- system deps (StellaSoraBotv2.sh + Wine/Proton-GE) ---
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git build-essential wget ffmpeg default-jre \
+RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-install-recommends \
+    curl wget git build-essential ffmpeg default-jre \
     ca-certificates cabextract winbind xvfb xauth \
-    libvulkan1 libvulkan1:i386 2>/dev/null || true; \
-    dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-install-recommends \
-    wine64 wine32 winetricks xvfb \
+    libvulkan1 libvulkan1:i386 \
+    wine64 wine32 winetricks \
     && rm -rf /var/lib/apt/lists/*
 
 # .NET 8 SDK (StellaSoraBotv2.sh: microsoft prod deb)
