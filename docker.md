@@ -1,4 +1,4 @@
-# Docker
+# Docker/Podman
 
 Container runs **StellaSoraBot + Stella Sora game (Wine/Proton-GE) + GroundingDINO (CUDA)** together. Based on `StellaSoraBotv2.sh`.
 
@@ -14,24 +14,17 @@ Container runs **StellaSoraBot + Stella Sora game (Wine/Proton-GE) + GroundingDI
 - Private `fkStellaSora` unpacker — **not baked into public image** (legal). Provide at runtime (see below).
 - `user-passwords.py` + `user-config.py` edits for wiki uploads (pywikibot).
 
-## System deps inside (from `StellaSoraBotv2.sh:15`)
-
-`curl git build-essential wget ffmpeg default-jre dotnet-sdk-8.0 uv vgmstream-cli playwright chromium` plus `wine64 wine32 winetricks xvfb cabextract` and Proton-GE (latest `GloriousEggroll/proton-ge-custom`).
-
-Non-root `bot` user (script refuses root, `StellaSoraBotv2.sh:8`; secureblue best practice).
-
-## Environment
-
-- `WINEPREFIX=/home/bot/.wine-stella`, `WINEARCH=win64`
-- `STELLA_SORA_DIR=/home/bot/.wine-stella/drive_c/YostarGames/StellaSora_EN` (overrides `unpack/unpack_paths.py:6` default Bottles path)
-- `PROTON_GE=/home/bot/.local/share/proton-ge/proton`, `CUDA_HOME=/usr/local/cuda`
-
 ## Build & run
 
+`docker` can be used instead of `podman`.
+
+Before starting, ensure you edit `user-passwords.py` & `user-config.py`, and add the folder for fkStellaSora in `docker-compose.yml`.
+
 ```bash
-# edit compose: set fkStellaSora host path
-docker compose build
-docker compose run --gpus all stellasora  # interactive shell (default CMD)
+run0 podman image trust set -t accept docker.io/nvidia/cuda
+
+podman compose build
+podman compose run --gpus all stellasora  # interactive shell (default CMD)
 
 # first run inside container — install game (interactive, needs DISPLAY or xvfb):
 wine ~/StellaSora_EN_Launcher.exe
@@ -43,7 +36,7 @@ uv run -m main
 uv run -m main2
 ```
 
-Single-shot: `docker compose run --gpus all stellasora uv run -m main`
+Single-shot: `podman compose run --gpus all stellasora uv run -m main`
 
 ## Private vendor
 
