@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     ffmpeg \
-    openjdk-26-jre-headless
+    openjdk-24-jre-headless
 
 # Install Microsoft repository and .NET 8 SDK
 RUN wget https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb \
