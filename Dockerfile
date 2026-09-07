@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
 RUN wget https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb \
     && dpkg -i /tmp/packages-microsoft-prod.deb \
     && rm /tmp/packages-microsoft-prod.deb \
-    && apt-get update && apt-get install -y dotnet-sdk-8.0 \
+    && apt-get update && apt-get install -y dotnet-sdk-8.0
 
 # CUDA toolkit
 # from https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#debian
