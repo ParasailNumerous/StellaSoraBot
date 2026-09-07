@@ -10,13 +10,6 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     wget
 
-# CUDA toolkit
-# from https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#debian
-RUN wget https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb \
-    && dpkg -i /tmp/cuda-keyring.deb \
-    && rm /tmp/cuda-keyring.deb \
-    && apt-get update && apt-get install -y cuda-toolkit
-
 # System packages
 RUN apt-get update && apt-get install -y \
     git \
@@ -30,6 +23,13 @@ RUN wget https://packages.microsoft.com/config/debian/13/packages-microsoft-prod
     && dpkg -i /tmp/packages-microsoft-prod.deb \
     && rm /tmp/packages-microsoft-prod.deb \
     && apt-get update && apt-get install -y dotnet-sdk-8.0 \
+
+# CUDA toolkit
+# from https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#debian
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb \
+    && dpkg -i /tmp/cuda-keyring.deb \
+    && rm /tmp/cuda-keyring.deb \
+    && apt-get update && apt-get install -y cuda-toolkit
 
 WORKDIR /root
 ENV HOME=/root \
