@@ -875,6 +875,8 @@ class AnimationExporter:
         self.char_id = char_id
         self.id_tokens = {char_id, char_id[:-2]}
         self.rest, self.shapes = _skeleton_rest_pose(char_id)
+        self.compatible_paths = _character_skeleton_paths(char_id)
+        self.character_bones = _character_bone_paths(char_id)
         self.sources = self._load_environments()
 
     def _load_environments(self) -> list[tuple[UnityPy.Environment, dict[int, str]]]:
@@ -931,6 +933,7 @@ class AnimationExporter:
         nodes: dict[str, int] = {}
         inputs: dict[bytes, int] = {}
         morphs: dict[str, dict[int, Curve]] = {}
+        has_character_track = False
 
         for binding, first, width in clip_bindings(clip):
             if binding.typeID == CLASS_SKINNED_MESH_RENDERER:
@@ -939,13 +942,13 @@ class AnimationExporter:
             if binding.typeID != CLASS_TRANSFORM or binding.attribute not in ATTRIBUTE_WIDTH:
                 continue
             path = tos.get(binding.path)
-            rest = self.rest.get(path) if path else None
-            # Cloth and skirt bones are spawned by the runtime, not in the prefab.
-            if rest is None:
+            if path is None or path not in self.compatible_paths:
                 continue
             components = [curves.get(first + i) for i in range(width)]
             if any(c is None for c in components):
                 continue
+            if path in self.character_bones:
+                has_character_track = True
 
             prop = ATTRIBUTE_PROPERTY[binding.attribute]
             times, values = self._sample(components, start, duration, rate,
@@ -954,13 +957,10 @@ class AnimationExporter:
                 values = _euler_to_quaternion(values)
             values = _to_gltf(prop, values)
             times, values = decimate(times, values, TOLERANCE[prop])
-            if len(times) <= 2 and np.abs(values - np.asarray(rest[prop])).max() \
-                    <= TOLERANCE[prop]:
-                continue                      # holds the rest pose; nothing to say
 
             if path not in nodes:
                 nodes[path] = len(gltf.root["nodes"])
-                gltf.root["nodes"].append({"name": rest["name"]})
+                gltf.root["nodes"].append({"name": path.rsplit("/", 1)[-1]})
             animation["samplers"].append({
                 "input": _shared_input(gltf, inputs, times),
                 "output": _output_accessor(gltf, prop, values),
@@ -1002,7 +1002,7 @@ class AnimationExporter:
                            "path": "weights"},
             })
 
-        if not animation["channels"]:
+        if not has_character_track and not morphs:
             return None
         gltf.root["scenes"][0]["nodes"] = list(range(len(gltf.root["nodes"])))
         return gltf
@@ -1169,6 +1169,56 @@ def _skeleton_rest_pose(
     for child in find_prefab_root(env, char_id).m_Children:
         walk(child.read(), "")
     return rest, shapes
+
+
+@cache
+def _character_skeleton_paths(char_id: str) -> frozenset[str]:
+    """All skeleton paths that any available outfit of this character uses."""
+    character_id = str(autoload("CharacterSkin")[char_id]["CharId"])
+    paths: set[str] = set()
+    for skin_id, skin in autoload("CharacterSkin").items():
+        if str(skin["CharId"]) != character_id:
+            continue
+        try:
+            rest, _ = _skeleton_rest_pose(skin_id)
+        except FileNotFoundError:
+            continue
+        paths.update(rest)
+    return frozenset(paths)
+
+
+@cache
+def _character_bone_paths(char_id: str) -> frozenset[str]:
+    """Paths used as bones by skinned meshes in any of this character's outfits."""
+    character_id = str(autoload("CharacterSkin")[char_id]["CharId"])
+    paths: set[str] = set()
+    for skin_id, skin in autoload("CharacterSkin").items():
+        if str(skin["CharId"]) != character_id:
+            continue
+        try:
+            env = load_character_env(skin_id, parts=("models",))
+        except FileNotFoundError:
+            continue
+        transforms: dict[int, str] = {}
+        bone_ids: set[int] = set()
+
+        def walk(transform: Transform, prefix: str) -> None:
+            game_object = transform.m_GameObject.read()
+            path = f"{prefix}/{game_object.m_Name}" if prefix else game_object.m_Name
+            transforms[transform.object_reader.path_id] = path
+            for component in game_object.m_Component:
+                if component.component.type.name != "SkinnedMeshRenderer":
+                    continue
+                renderer: SkinnedMeshRenderer = component.component.read()
+                bone_ids.update(bone.path_id for bone in renderer.m_Bones)
+                bone_ids.add(renderer.m_RootBone.path_id)
+            for child in transform.m_Children:
+                walk(child.read(), path)
+
+        for child in find_prefab_root(env, skin_id).m_Children:
+            walk(child.read(), "")
+        paths.update(transforms[bone_id] for bone_id in bone_ids if bone_id in transforms)
+    return frozenset(paths)
 
 
 def _read_glb(path: Path) -> tuple[dict[str, Any], bytes]:
@@ -1439,6 +1489,9 @@ def export_animations(char_id: str, char_dir: Path, stem: str,
         if hide:
             entry["hide"] = hide
         manifest.append(entry)
+    for path in clip_dir.glob("*.glb"):
+        if path.stem not in taken:
+            path.unlink()
     (char_dir / f"{stem}.anims.json").write_text(
         json.dumps({"id": char_id, "clips": manifest}, indent=1))
     return manifest

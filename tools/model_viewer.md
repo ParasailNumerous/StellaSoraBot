@@ -1,7 +1,7 @@
-# 3D model viewer (POC)
+# 3D model exports and local viewer
 
-Exports Stella Sora character models to glTF and renders them in three.js with a
-reimplementation of the game's `Game/Actor/Toon` shader.
+Exports Stella Sora character models to glTF and previews local files with the
+wiki’s ModelViewer gadget loaded from jsDelivr.
 
 ## Use
 
@@ -14,33 +14,41 @@ uv run -m unpack.unpack_model --jobs 4                    # fewer characters at 
 python3 -m http.server 8777          # then open :8777/tools/model_viewer.html
 ```
 
-Output goes to `assets/assetbundles/actor3d/`; the page loads it from there, so
-serve the repo root rather than `tools/`; with nothing exported there the page
-says so and names the exporter. A server is required — the page is an
-ES module and fetches `.glb` over HTTP. three.js comes from jsDelivr, pinned to
-r185 in the page's import map, so the viewer also needs a network connection.
+Open <http://localhost:8777/tools/model_viewer.html> after starting the server
+from the repository root. Models, animation manifests and clips come from
+`assets/assetbundles/actor3d/` on your machine. The page loads exactly:
+
+```text
+https://cdn.jsdelivr.net/gh/lihaohong6/MirahezeDevScripts@dist/dist/ModelViewer/gadget-impl.js
+```
+
+The bundle supplies the rendering code, controls and CSS. A small local
+MediaWiki adapter runs its ResourceLoader wrapper and page hooks; controls use
+native browser styling in place of the wiki’s Codex stylesheet. three.js is
+loaded by the gadget, so an internet connection is required.
+
+Pick any exported base model or variant in the gadget’s **Model** dropdown,
+then choose its animation. Variants include all of their base model’s clips
+alongside their own; when both libraries contain the same name, the variant’s
+copy is labelled `(variant)`. Other characters’ clips are excluded. Per-clip
+`show`/`hide` rules are preserved. Playback, scrubbing and speed controls come
+from the gadget.
+
+Reload after re-exporting. Each page load adds a fresh query parameter to
+local asset URLs and bypasses the JSON cache, so unpublished changes can be
+checked without pushing the model repository or refreshing jsDelivr.
 
 Characters already exported are skipped; pass `--overwrite` to redo them. The
 first run builds `assets/assetbundles/cab_index.json` (~1 min, 9,640 bundles);
-it is cached. The viewer hides its animation controls for a character that has
-no clips exported.
+it is cached. A library without exported clips opens in the bind pose.
 
 Characters export in parallel, one process each. All 50 with their clips takes
 about 70 seconds on 20 cores. A character peaks near 2 GB and UnityPy hands
 little of it back, so `--jobs` is worth lowering on a machine with less memory
 than cores would suggest; it defaults to cores minus four.
 
-The viewer opens on *Base colour only*. The toon shader is a reimplementation
-working off the material properties alone, and its specular and matcap read
-brighter than the game's; the flat view is the more trustworthy default. *Toon
-(shader)* under View switches to it, and unfolds the Light and Toon sections,
-which start folded because nothing in them reaches the flat view.
-
-Two more defaults are tuned for that view rather than for the material: the
-outline sits at 25%, since 100% is what `_OutlineWidth` says and the game
-thickens the hull with distance while the viewer sits closer than it ever does,
-and *Brows over hair* is off, so the fringe occludes the eyebrows as geometry
-normally would.
+The viewer defaults to unlit shading and a 25% outline. Rendering and animation
+behavior are provided by the published gadget.
 
 ## How it works
 
@@ -90,8 +98,17 @@ character's id (`133_Ready`), or — for an alt outfit's own timeline cutscene �
 the 5-digit skin id instead (`13303_Ready`); since clips are already grouped
 one character at a time, that token is redundant and the exporter drops it, so
 the clip above is named and filed simply `Ready`. The viewer loads each clip on
-demand and retargets it onto the model by bone name. Alternate outfits have no
-clips of their own and fall back to the default outfit's bundle.
+demand and retargets it onto the model by bone name. Alternate outfits fall back
+to the default outfit's bundle for each missing animations or timeline bundle.
+
+Transform tracks under `Root/Bip001` are retained even when the exporting
+outfit's prefab has no matching bone. Shared clips include bones used only by
+other outfits: Amber's swimsuit, for example, weights its limbs to six twist
+bones absent from her default model. Filtering against that default prefab
+removed their animation and deformed the swimsuit's arms and legs. Tracks that
+hold the exporting model's rest pose are retained too, since another outfit
+can have a different rest transform. Viewers ignore tracks for absent bones.
+Re-export existing clips to apply this fix; the model files need no changes.
 
 The clips are generic (non-humanoid) Mecanim, so there is no muscle rig to
 decode — just float curves. `m_MuscleClip.m_Clip` splits them across three
@@ -121,8 +138,8 @@ only over the moment it fires starts seconds in, and extrapolating backwards to
 
 Transform and blend shape bindings are taken. What that leaves out:
 
-- **Cloth and skirt bones** are in the clips but not in the model prefab — the
-  runtime spawns them — so those tracks are dropped.
+- **Runtime-only bones** have tracks, but will only move geometry if the loaded
+  model contains those bones. The viewer does not spawn bones or simulate cloth.
 - **Root motion** rides on the Animator binding (`kBindMotionT`/`Q`, seven
   curves) rather than a transform track, on the dashes and lunges. Skipping it is
   deliberate: clips then play in place instead of walking out of frame.
@@ -149,8 +166,8 @@ crossfade. Excursions inside a densely keyed stretch overshoot by 1–2% at most
 so this costs nothing where the artist actually keyed something.
 
 Only a handful of clips animate a face — Ready, ReadyLoop, Victory, VictoryLoop,
-the ultra Timeline, and the occasional Die — and the manifest flags them, which
-is what `· face` in the viewer's clip list marks. Everything else leaves the face
+the ultra Timeline, and the occasional Die — and the manifest flags them with
+`face: true`. Everything else leaves the face
 neutral, including Idle and the whole combat set, so a character only changes
 expression on those clips. That is what the bundles hold, not something the
 exporter drops: no attack or skill clip carries a blend shape binding.
@@ -265,50 +282,14 @@ from `shader.unity3d`:
 | `_SpecularMap` | Specular Color (RGB) |
 | `_EmissionMap` | Emission Map (RGB) Animation Mask (A) |
 
-Two things are worth knowing:
-
-**`_MaskMap` R means different things per surface.** On the body it sits at a
-neutral ~0.5 and drops to 0 in creases, so it biases the light ramp. On the face
-(`_CharSurface == 3`) it is a face-shadow lightmap: each texel stores the
-horizontal light angle at which it falls into shadow, and the map is mirrored in
-U when the key light crosses the head's centre line. Texels outside the authored
-island read 0 and fall back to half-lambert.
-
-**Materials ship near-white `_ShadowColor`** (0.93–0.96). In game the contrast
-comes from the scene light rig, which is not in the character bundles, so the
-faithful result is almost flat. The *Shadow depth* slider scales the shadow tint;
-100% is exactly what the material says, and it defaults to 35% to look right
-standalone.
-
-Unity serialises LDR material colours gamma-encoded and converts them on upload;
-HDR colours (any component > 1) are already linear. The viewer follows that rule.
-Getting it wrong makes outlines mid-grey instead of dark.
-
-The face keeps an inverted hull, but a capped one. Without it the chin dissolves
-into the neck — the head is its own mesh, ending at the jaw seam, and both sides
-of that seam are the same shade of skin, so nothing marks the jawline. Past what
-`_OutlineWidth` says the hull starts eating the mouth corners and the eyelids, so
-the face stops there while the slider goes on thickening the rest. Everything
-finer than the jaw — eyes, brows, lips — is texture linework, as in game.
-Eyebrows (`_CharSurface == 1`) and the emote quads are decals lying flat on the
-face and get no hull at all: on them it is pure artefact.
-
-The hull is suppressed per vertex by painting `COLOR_0.a` to 0 — TCP2's usual
-way of keeping it out of a fold. The body mesh does this on 48 of its 11,502
-vertices; the face mesh does it on none of its 2,009, mouth interior included.
-That interior sits collapsed behind the lips at rest, so the gap goes unnoticed
-until a clip opens the jaw wide — 130_Victory's `face09` blend shape does —
-at which point the now-unfolded, concave interior gets hauled through the same
-extrude-along-normal-by-view-distance math as the rest of the face, and lands
-back inside the mouth as a flat patch of `_OutlineColor`. Confirmed by toggling
-Outline off: the patch is exactly `_OutlineColor`, not a texture region. Whether
-the game hits this too is unknown — this reproduces the source vertex colours
-faithfully, so if it's wrong it is wrong upstream, not in the export.
+These extras preserve the game’s material data. The local viewer uses the
+gadget’s glTF rendering and outline implementation; the previous local toon
+shader implementation is available in git history.
 
 ## On the wiki
 
-`tools/model_viewer.html` is the local POC. The wiki shows the same models
-through the **ModelViewer** gadget written for
+`tools/model_viewer.html` runs the same **ModelViewer** gadget as the wiki,
+written for
 [dev.miraheze.org](https://dev.miraheze.org/wiki/Template:ModelViewer), which
 turns a `.model-viewer` div's `data-` attributes into a three.js viewer and
 fetches nothing until one scrolls into view.
@@ -332,9 +313,15 @@ per character, and a `3D models` section on each character's `/gallery` page,
 each of them one `{{#invoke:}}`. That split is the point: exporting a character
 or a skin changes the manifest and nothing else.
 
-The manifest holds paths relative to a `base` URL rather than whole URLs, and
-names a clip only where its file is not already named after it, which is what
-keeps 52 models and 1,878 clips inside 80 KB. `MODEL_REPO_REF` in that module
+Variants inherit their base model's clips. When both have a clip with the
+same name, the variant's own clip takes precedence. Part-visibility rules
+travel with each clip, and the target model's `PART_OVERRIDES` apply after
+the merge.
+
+The manifest holds paths relative to a `base` URL rather than whole URLs.
+Each model's `anims` directory is the common parent of its clip directories;
+clips from multiple directories carry relative paths and explicit names.
+`MODEL_REPO_REF` in that module
 is the git ref jsDelivr is pointed at; jsDelivr caches a branch for 12 hours,
 so a re-export that has to show up at once wants a tag or a commit sha there.
 
