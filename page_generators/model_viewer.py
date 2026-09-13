@@ -107,6 +107,10 @@ def build_manifest() -> dict:
             model["anims"] = posixpath.dirname(clips[0]["file"]) + "/"
             model["clips"] = [as_clip(clip) for clip in clips]
         grouped.setdefault(name, []).append(model)
+    for models in grouped.values():
+        base_model = next(model for model in models if not model["skin"])
+        for model in models:
+            model["base_model"] = base_model["id"]
     return {
         "base": CDN_BASE,
         "characters": [{"name": name, "models": models}
